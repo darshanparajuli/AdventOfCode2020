@@ -40,13 +40,11 @@ fn part1(input: &HashMap<String, HashMap<String, u32>>) {
 
         while let Some(bag) = queue.pop_front() {
             let contains = &input[bag];
-            if contains.len() > 0 && contains.contains_key(target) {
+            if contains.contains_key(target) {
                 count += 1;
                 break;
             } else {
-                for (b, _) in contains {
-                    queue.push_back(b);
-                }
+                contains.keys().for_each(|e| queue.push_back(e));
             }
         }
     }
@@ -65,7 +63,7 @@ fn part2(input: &HashMap<String, HashMap<String, u32>>) {
     while let Some((bag, multiplier)) = queue.pop_front() {
         let contains = &input[bag];
         for (k, v) in contains {
-            queue.push_back((k, *v * multiplier));
+            queue.push_back((k, v * multiplier));
             count += v * multiplier;
         }
     }
