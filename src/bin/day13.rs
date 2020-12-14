@@ -1,4 +1,4 @@
-use aoc_2020::read_input_map;
+use aoc_2020::{crt, read_input_map};
 use std::collections::HashMap;
 
 fn main() {
@@ -46,8 +46,6 @@ fn part1((timestamp, ids): &(u32, Vec<i32>)) {
     println!("part 1: {}", answer);
 }
 
-/// Solved using Chinese Remainder Theorem.
-/// Learned something new!
 fn part2((_, ids): &(u32, Vec<i32>)) {
     let mut offsets = HashMap::new();
 
@@ -57,44 +55,20 @@ fn part2((_, ids): &(u32, Vec<i32>)) {
         }
     }
 
-    let ids = ids
+    let nums = ids
         .iter()
         .filter(|e| **e != -1)
         .cloned()
         .map(|e| e as u64)
+        .map(|e| e.wrapping_sub(offsets[&e]))
         .collect::<Vec<u64>>();
 
-    // (x, n) =>  x mod n
     let mods = ids
         .iter()
-        .map(|e| (e - offsets[e], *e))
-        .collect::<Vec<(u64, u64)>>();
-
-    let bi = mods.iter().map(|(e, _)| *e).collect::<Vec<_>>();
-    let n = mods.iter().map(|(_, m)| *m).product::<u64>();
-    let ni = mods.iter().map(|(_, m)| n / m).collect::<Vec<_>>();
-
-    let xi = ni
-        .iter()
-        .enumerate()
-        .map(|(i, n)| {
-            let (_, m) = mods[i];
-
-            let mut count = 1;
-            while (n * count) % m != 1 {
-                count += 1;
-            }
-
-            count
-        })
+        .filter(|e| **e != -1)
+        .map(|e| *e as u64)
         .collect::<Vec<_>>();
 
-    let bi_ni_xi = (0..mods.len())
-        .map(|i| bi[i] * ni[i] * xi[i])
-        .collect::<Vec<_>>();
-
-    let bi_ni_xi_sum = bi_ni_xi.iter().sum::<u64>();
-    let answer = bi_ni_xi_sum % n;
-
+    let answer = crt(&nums, &mods);
     println!("part 2: {}", answer);
 }
