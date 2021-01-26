@@ -1,201 +1,210 @@
 use aoc_2020::*;
-use std::collections::BTreeMap;
+use std::ptr;
 
 fn main() {
     let input = read_input()
         .first()
         .unwrap()
         .chars()
-        .map(|e| e.to_digit(10).unwrap() as i32)
+        .map(|e| e.to_digit(10).unwrap() as u64)
         .collect::<Vec<_>>();
     part1(input.clone());
     part2(input);
 }
 
-fn part1(input: Vec<i32>) {
+fn part1(input: Vec<u64>) {
     let mut crab_cups = CrabCups::new(&input);
-    let mut i = 0;
-    let mut tmp = vec![];
     for _ in 0..100 {
-        let picked = crab_cups.get(i);
-
-        tmp.clear();
-        for _ in 0..3 {
-            let a = (i + 1) % crab_cups.count;
-            tmp.push(crab_cups.take(a));
-        }
-
-        let destination = {
-            let mut picked = picked;
-            'outer: loop {
-                if picked == 0 {
-                    let (k, _) = crab_cups.max();
-                    break k;
-                } else {
-                    picked -= 1;
-                    for k in 0..crab_cups.count - 1 {
-                        let next = (i + k + 1) % crab_cups.count;
-                        if crab_cups.contains(next) && crab_cups.get(next) == picked {
-                            break 'outer next;
-                        }
-                    }
-                }
-            }
-        };
-
-        for i in tmp.iter().rev() {
-            crab_cups.put((destination + 1) % crab_cups.count, *i);
-        }
-
-        i = (i + 1) % crab_cups.count;
+        crab_cups.play_round();
     }
-
-    let (index_1, _) = crab_cups.map.iter().find(|(_, v)| **v == 1).unwrap();
-    let mut s = String::new();
-    for i in 1..crab_cups.count {
-        let k = (index_1 + i) % crab_cups.count;
-        s.push_str(&format!("{}", crab_cups.get(k)));
-    }
-    println!("part 1: {}", s);
+    println!(
+        "part 1: {}",
+        crab_cups
+            .get_values_after_one()
+            .iter()
+            .map(|e| e.to_string())
+            .collect::<Vec<_>>()
+            .join("")
+    );
 }
 
-fn part2(input: Vec<i32>) {
-    let mut v = input.to_vec();
-    let max = v.iter().max().unwrap();
+fn part2(input: Vec<u64>) {
+    let mut input = input.to_vec();
+    let max = input.iter().max().unwrap();
     for i in max + 1..=1_000_000 {
-        v.push(i);
+        input.push(i);
     }
 
-    let mut crab_cups = CrabCups::new(&v);
-    let mut i = 0;
-    let mut tmp = vec![];
+    let mut crab_cups = CrabCups::new(&input);
     for _ in 0..10_000_000 {
-        let picked = crab_cups.get(i);
-
-        tmp.clear();
-        for _ in 0..3 {
-            let a = (i + 1) % crab_cups.count;
-            tmp.push(crab_cups.take(a));
-        }
-
-        let destination = {
-            let mut picked = picked;
-            'outer: loop {
-                if picked == 0 {
-                    let (k, _) = crab_cups.max();
-                    break k;
-                } else {
-                    picked -= 1;
-                    for k in 0..crab_cups.count - 1 {
-                        let next = (i + k + 1) % crab_cups.count;
-                        if crab_cups.contains(next) && crab_cups.get(next) == picked {
-                            break 'outer next;
-                        }
-                    }
-                }
-            }
-        };
-
-        for i in tmp.iter().rev() {
-            crab_cups.put((destination + 1) % crab_cups.count, *i);
-        }
-
-        i = (i + 1) % crab_cups.count;
-
-        let (index_1, _) = crab_cups.map.iter().find(|(_, v)| **v == 1).unwrap();
-        for i in 0..3 {
-            let k = (index_1 + i) % crab_cups.count;
-            print!("{} ", crab_cups.get(k));
-        }
-        println!();
+        crab_cups.play_round();
     }
 
-    let (index_1, _) = crab_cups.map.iter().find(|(_, v)| **v == 1).unwrap();
-    let mut s = String::new();
-    for i in 1..crab_cups.count {
-        let k = (index_1 + i) % crab_cups.count;
-        s.push_str(&format!("{}", crab_cups.get(k)));
-    }
+    let values_after_one = crab_cups.get_values_after_one();
+    let a = values_after_one[0];
+    let b = values_after_one[1];
+    println!("part 2: {}", a * b);
+}
 
-    println!("part 2: {}", s);
+#[derive(Debug, Clone)]
+struct Cup {
+    value: u64,
+    next: *mut Cup,
+}
+
+impl Cup {
+    fn new(value: u64) -> Self {
+        Self {
+            value,
+            next: ptr::null_mut(),
+        }
+    }
 }
 
 struct CrabCups {
-    count: i32,
-    map: BTreeMap<i32, i32>,
+    head: *mut Cup,
+    picked: *mut Cup,
+    cup_map: Vec<*const Cup>,
+    max_num: u64,
 }
 
 impl CrabCups {
-    fn new(input: &[i32]) -> Self {
-        Self {
-            count: input.len() as i32,
-            map: input
-                .iter()
-                .enumerate()
-                .map(|(i, e)| (i as i32, *e))
-                .collect(),
-        }
-    }
+    fn new(input: &[u64]) -> Self {
+        let mut head: *mut Cup = ptr::null_mut();
+        let mut last: *mut Cup = ptr::null_mut();
+        let mut cup_map = vec![ptr::null(); input.len()];
 
-    fn contains(&self, index: i32) -> bool {
-        self.map.contains_key(&index)
-    }
-
-    fn get(&self, index: i32) -> i32 {
-        self.map[&index]
-    }
-
-    fn take(&mut self, index: i32) -> i32 {
-        let value = self.map.remove(&index).unwrap();
-        let mut i = index;
-
-        for _ in 0..self.count - 1 {
-            let j = (i + 1) % self.count;
-            let a = self.map.remove(&j);
-            if a.is_some() {
-                self.map.insert(i, a.unwrap());
+        for n in input {
+            let cup = Box::new(Cup::new(*n));
+            let cup = Box::into_raw(cup);
+            if head.is_null() {
+                head = cup;
+                last = cup;
             } else {
-                self.map.remove(&i);
+                {
+                    let last = unsafe { last.as_mut().unwrap() };
+                    last.next = cup;
+                }
+                last = cup;
             }
-            i = (i + 1) % self.count;
+
+            cup_map[(*n - 1) as usize] = cup;
         }
 
-        value
+        {
+            let last = unsafe { last.as_mut().unwrap() };
+            last.next = head;
+        }
+
+        let max_num = *input.iter().max().unwrap();
+
+        Self {
+            head,
+            picked: head,
+            cup_map,
+            max_num,
+        }
     }
 
-    fn put(&mut self, index: i32, value: i32) {
-        let mut last = None;
-        let mut i = index % self.count;
+    fn play_round(&mut self) {
+        let picked_three = self.take_next_three();
+        let dest_cup = self.get_dest_cup(&picked_three);
 
-        for _ in 0..self.count - 1 {
-            let at = i % self.count;
+        let (a, _, c) = picked_three;
+        let next = unsafe { dest_cup.as_ref().unwrap() }.next;
+        unsafe { dest_cup.as_mut().unwrap() }.next = a;
+        unsafe { c.as_mut().unwrap() }.next = next;
 
-            let a = self.map.remove(&at);
-            if let Some(last) = last {
-                self.map.insert(at, last);
-            }
+        self.pick_next();
+    }
 
-            if a.is_none() {
-                break;
-            }
+    fn pick_next(&mut self) {
+        let picked = unsafe { self.picked.as_ref().unwrap() };
+        self.picked = picked.next;
+    }
 
-            last = a;
-            i = (i + 1) % self.count;
+    fn get_dest_cup(&mut self, picked_three: &(*mut Cup, *mut Cup, *mut Cup)) -> *mut Cup {
+        let (a, b, c) = picked_three;
+
+        let a_v = unsafe { a.as_ref().unwrap() }.value;
+        let b_v = unsafe { b.as_ref().unwrap() }.value;
+        let c_v = unsafe { c.as_ref().unwrap() }.value;
+
+        let mut target = unsafe { self.picked.as_ref().unwrap() }.value - 1;
+        while target > 0 && (target == a_v || target == b_v || target == c_v) {
+            target -= 1;
         }
 
-        self.map.insert(index, value);
+        if target == 0 {
+            let mut max = self.max_num;
+            while max == a_v || max == b_v || max == c_v {
+                max -= 1;
+            }
+            self.cup_map[(max as usize) - 1] as *mut _
+        } else {
+            self.cup_map[(target as usize) - 1] as *mut _
+        }
+    }
+
+    fn take_next_three(&mut self) -> (*mut Cup, *mut Cup, *mut Cup) {
+        let a = unsafe { self.picked.as_ref().unwrap() }.next;
+        let b = unsafe { a.as_ref().unwrap() }.next;
+        let c = unsafe { b.as_ref().unwrap() }.next;
+
+        unsafe { self.picked.as_mut().unwrap() }.next = unsafe { c.as_ref().unwrap() }.next;
+        unsafe { c.as_mut().unwrap() }.next = ptr::null_mut();
+
+        (a, b, c)
+    }
+
+    fn get_values_after_one(&self) -> Vec<u64> {
+        let mut result = vec![];
+        let start = self.cup_map[0];
+        let mut next = unsafe { start.as_ref().unwrap() }.next as *const _;
+
+        while next != start {
+            let value = unsafe { next.as_ref().unwrap() }.value;
+            result.push(value);
+
+            next = unsafe { next.as_ref().unwrap() }.next;
+        }
+
+        result
     }
 
     #[allow(dead_code)]
-    fn to_vec(&self) -> Vec<i32> {
-        self.map.iter().map(|(_, v)| v).copied().collect::<Vec<_>>()
+    fn print(&self) {
+        let mut node = self.head;
+        let mut i = 0;
+        let picked_value = unsafe { self.picked.as_ref().unwrap() }.value;
+        while i < self.cup_map.len() {
+            let v = unsafe { node.as_ref().unwrap() }.value;
+            if v == picked_value {
+                print!("({}) ", v);
+            } else {
+                print!(" {}  ", v);
+            }
+            node = unsafe { node.as_ref().unwrap() }.next;
+            i += 1;
+        }
+        println!();
     }
+}
 
-    fn max(&self) -> (i32, i32) {
-        self.map
-            .iter()
-            .max_by(|(_, a), (_, b)| a.cmp(b))
-            .map(|(k, v)| (*k, *v))
-            .unwrap()
+impl Drop for CrabCups {
+    fn drop(&mut self) {
+        let count = self.cup_map.len();
+        self.cup_map.clear();
+        self.picked = ptr::null_mut();
+        self.max_num = 0;
+
+        let mut n = self.head;
+        for _ in 0..count {
+            let k = n;
+            n = unsafe { n.as_ref().unwrap() }.next;
+            drop(unsafe { Box::from_raw(k) });
+        }
+
+        self.head = ptr::null_mut();
     }
 }
