@@ -99,7 +99,7 @@ fn part2(input: Vec<Vec<String>>) {
     }
 
     let mut to_flip = vec![];
-    for i in 0..100 {
+    for _ in 0..100 {
         to_flip.clear();
         let ((min_x, max_x), (min_y, max_y)) = floor.min_max_dim();
         for y in min_y..=max_y {
