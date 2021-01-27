@@ -1,5 +1,4 @@
 use aoc_2020::*;
-use std::ptr;
 
 fn main() {
     let input = read_input()
@@ -46,56 +45,48 @@ fn part2(input: Vec<u64>) {
     println!("part 2: {}", a * b);
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Copy, Clone)]
 struct Cup {
     value: u64,
-    next: *mut Cup,
+    next: RawPtr<Cup>,
 }
 
 impl Cup {
     fn new(value: u64) -> Self {
         Self {
             value,
-            next: ptr::null_mut(),
+            next: RawPtr::null(),
         }
     }
 }
 
 struct CrabCups {
-    head: *mut Cup,
-    picked: *mut Cup,
-    cup_map: Vec<*const Cup>,
+    head: RawPtr<Cup>,
+    picked: RawPtr<Cup>,
+    cup_map: Vec<RawPtr<Cup>>,
     max_num: u64,
 }
 
 impl CrabCups {
     fn new(input: &[u64]) -> Self {
-        let mut head: *mut Cup = ptr::null_mut();
-        let mut last: *mut Cup = ptr::null_mut();
-        let mut cup_map = vec![ptr::null(); input.len()];
+        let mut head: RawPtr<Cup> = RawPtr::null();
+        let mut last: RawPtr<Cup> = RawPtr::null();
+        let mut cup_map = vec![RawPtr::null(); input.len()];
 
         for n in input {
-            let cup = Box::new(Cup::new(*n));
-            let cup = Box::into_raw(cup);
+            let cup = RawPtr::from_boxed(Box::new(Cup::new(*n)));
             if head.is_null() {
                 head = cup;
                 last = cup;
             } else {
-                {
-                    let last = unsafe { last.as_mut().unwrap() };
-                    last.next = cup;
-                }
+                last.as_mut().next = cup;
                 last = cup;
             }
 
             cup_map[(*n - 1) as usize] = cup;
         }
 
-        {
-            let last = unsafe { last.as_mut().unwrap() };
-            last.next = head;
-        }
-
+        last.as_mut().next = head;
         let max_num = *input.iter().max().unwrap();
 
         Self {
@@ -108,29 +99,27 @@ impl CrabCups {
 
     fn play_round(&mut self) {
         let picked_three = self.take_next_three();
-        let dest_cup = self.get_dest_cup(&picked_three);
+        let dest_cup = self.get_dest_cup(picked_three);
 
         let (a, _, c) = picked_three;
-        let next = unsafe { dest_cup.as_ref().unwrap() }.next;
-        unsafe { dest_cup.as_mut().unwrap() }.next = a;
-        unsafe { c.as_mut().unwrap() }.next = next;
+        let next = dest_cup.as_ref().next;
+        dest_cup.as_mut().next = a;
+        c.as_mut().next = next;
 
-        self.pick_next();
+        self.picked = self.picked.as_ref().next;
     }
 
-    fn pick_next(&mut self) {
-        let picked = unsafe { self.picked.as_ref().unwrap() };
-        self.picked = picked.next;
-    }
-
-    fn get_dest_cup(&mut self, picked_three: &(*mut Cup, *mut Cup, *mut Cup)) -> *mut Cup {
+    fn get_dest_cup(
+        &mut self,
+        picked_three: (RawPtr<Cup>, RawPtr<Cup>, RawPtr<Cup>),
+    ) -> RawPtr<Cup> {
         let (a, b, c) = picked_three;
 
-        let a_v = unsafe { a.as_ref().unwrap() }.value;
-        let b_v = unsafe { b.as_ref().unwrap() }.value;
-        let c_v = unsafe { c.as_ref().unwrap() }.value;
+        let a_v = a.as_ref().value;
+        let b_v = b.as_ref().value;
+        let c_v = c.as_ref().value;
 
-        let mut target = unsafe { self.picked.as_ref().unwrap() }.value - 1;
+        let mut target = self.picked.as_ref().value - 1;
         while target > 0 && (target == a_v || target == b_v || target == c_v) {
             target -= 1;
         }
@@ -140,19 +129,19 @@ impl CrabCups {
             while max == a_v || max == b_v || max == c_v {
                 max -= 1;
             }
-            self.cup_map[(max as usize) - 1] as *mut _
+            self.cup_map[(max as usize) - 1]
         } else {
-            self.cup_map[(target as usize) - 1] as *mut _
+            self.cup_map[(target as usize) - 1]
         }
     }
 
-    fn take_next_three(&mut self) -> (*mut Cup, *mut Cup, *mut Cup) {
-        let a = unsafe { self.picked.as_ref().unwrap() }.next;
-        let b = unsafe { a.as_ref().unwrap() }.next;
-        let c = unsafe { b.as_ref().unwrap() }.next;
+    fn take_next_three(&mut self) -> (RawPtr<Cup>, RawPtr<Cup>, RawPtr<Cup>) {
+        let a = self.picked.as_ref().next;
+        let b = a.as_ref().next;
+        let c = b.as_ref().next;
 
-        unsafe { self.picked.as_mut().unwrap() }.next = unsafe { c.as_ref().unwrap() }.next;
-        unsafe { c.as_mut().unwrap() }.next = ptr::null_mut();
+        self.picked.as_mut().next = c.as_ref().next;
+        c.as_mut().next = RawPtr::null();
 
         (a, b, c)
     }
@@ -160,13 +149,13 @@ impl CrabCups {
     fn get_values_after_one(&self) -> Vec<u64> {
         let mut result = vec![];
         let start = self.cup_map[0];
-        let mut next = unsafe { start.as_ref().unwrap() }.next as *const _;
+        let mut next = start.as_ref().next;
 
-        while next != start {
-            let value = unsafe { next.as_ref().unwrap() }.value;
+        while next.ptr() != start.ptr() {
+            let value = next.as_ref().value;
             result.push(value);
 
-            next = unsafe { next.as_ref().unwrap() }.next;
+            next = next.as_ref().next;
         }
 
         result
@@ -176,15 +165,15 @@ impl CrabCups {
     fn print(&self) {
         let mut node = self.head;
         let mut i = 0;
-        let picked_value = unsafe { self.picked.as_ref().unwrap() }.value;
+        let picked_value = self.picked.as_ref().value;
         while i < self.cup_map.len() {
-            let v = unsafe { node.as_ref().unwrap() }.value;
+            let v = node.as_ref().value;
             if v == picked_value {
                 print!("({}) ", v);
             } else {
                 print!(" {}  ", v);
             }
-            node = unsafe { node.as_ref().unwrap() }.next;
+            node = node.as_ref().next;
             i += 1;
         }
         println!();
@@ -195,16 +184,16 @@ impl Drop for CrabCups {
     fn drop(&mut self) {
         let count = self.cup_map.len();
         self.cup_map.clear();
-        self.picked = ptr::null_mut();
+        self.picked = RawPtr::null();
         self.max_num = 0;
 
         let mut n = self.head;
         for _ in 0..count {
             let k = n;
-            n = unsafe { n.as_ref().unwrap() }.next;
-            drop(unsafe { Box::from_raw(k) });
+            n = n.as_ref().next;
+            drop(k.into_boxed());
         }
 
-        self.head = ptr::null_mut();
+        self.head = RawPtr::null();
     }
 }

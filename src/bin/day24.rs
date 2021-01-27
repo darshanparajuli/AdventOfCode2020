@@ -59,8 +59,6 @@ fn part1(input: Vec<Vec<String>>) {
         floor.flip(x, y);
     }
 
-    floor.min_max_dim();
-
     println!("part 1: {}", floor.count_black_tiles());
 }
 
